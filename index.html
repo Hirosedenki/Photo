@@ -60,8 +60,13 @@ input:focus-visible,button:focus-visible,.add:focus-within{outline:3px solid var
 .cell{display:grid;gap:4px;align-content:start;min-width:0}
 .kubun{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
 .place2{display:grid;gap:0}
-.place2 .cmt:first-child{border-radius:6px 6px 0 0}
-.place2 .cmt:last-child{border-radius:0 0 6px 6px;border-top-style:dashed}
+.plrow{display:flex;min-width:0}
+.plrow .cmt{flex:1;min-width:0;padding:6px 6px}
+.histsel{flex:0 0 32px;width:32px;font-size:14px!important;font:inherit;font-size:16px;color:var(--accent);background:var(--card);border:1px solid var(--line);border-left:none;text-align:center;text-align-last:center;padding:0;appearance:none;-webkit-appearance:none;cursor:pointer}
+.place2 .plrow:first-child .histsel{border-radius:0 6px 0 0}
+.place2 .plrow:last-child .histsel{border-radius:0 0 6px 0;border-top-style:dashed}
+.place2 .plrow:first-child .cmt{border-radius:6px 0 0 0}
+.place2 .plrow:last-child .cmt{border-radius:0 0 0 6px;border-top-style:dashed}
 .cmt{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
 .cmt::placeholder{font-size:12px;color:var(--muted)}
 .pos{font-size:12px;color:var(--muted);text-align:center;line-height:1.4}
@@ -111,7 +116,7 @@ input:focus-visible,button:focus-visible,.add:focus-within{outline:3px solid var
 
   <section class="card" aria-labelledby="h-photo">
     <div class="sheet-h"><h2 id="h-photo">写真</h2><span class="count" id="count">0枚</span></div>
-    <p class="hint">追加した順に 左上 → 右上 → 左下 → 右下 に入ります。4枚を超えると「写真2」「写真3」…のシートが増えます。各写真の下で、区分（施工前・施工中・施工後）・場所・コメントを入力できます。場所（2行まで、1行あたり全角10文字ほど）は写真右上の「場所」欄に、コメントは区分の欄の2行下に入ります。</p>
+    <p class="hint">追加した順に 左上 → 右上 → 左下 → 右下 に入ります。4枚を超えると「写真2」「写真3」…のシートが増えます。各写真の下で、区分（施工前・施工中・施工後）・場所・コメントを入力できます。場所（2行まで、1行あたり全角10文字ほど）は写真右上の「場所」欄に入り、右の▼から過去に入力した場所を選べます。コメントは区分の欄の2行下に入ります。</p>
     <div id="pages" class="page-list" style="display:grid;gap:16px"></div>
     <label class="add" id="addBtn">
       <input type="file" id="file" accept="image/*" multiple>
@@ -376,6 +381,24 @@ $('file').addEventListener('change', async e=>{
 });
 
 // ── 表示 ──
+// ── 場所の入力履歴（1行目・2行目それぞれ、このスマホに保存） ──
+const HIST_MAX = 30;
+const histMem = {};
+function getHist(key){ try{ const v=localStorage.getItem('hirose-hist-'+key); if(v!==null) return JSON.parse(v); }catch(e){} return histMem[key]||[]; }
+function setHist(key, list){ histMem[key]=list; try{ localStorage.setItem('hirose-hist-'+key, JSON.stringify(list)); }catch(e){} refreshHistSelects(); }
+function addHist(key, v){ v=(v||'').trim(); if(!v) return; const list=getHist(key).filter(x=>x!==v); list.unshift(v); setHist(key, list.slice(0,HIST_MAX)); }
+function clearHist(key){ setHist(key, []); setStatus((key==='place'?'場所 1行目':'場所 2行目')+'の履歴を消しました。'); }
+function fillHistSelect(sel){
+  const key = sel.dataset.key, list = getHist(key);
+  sel.innerHTML='';
+  const head=document.createElement('option'); head.value=''; head.textContent='▼'; head.disabled=true; head.selected=true; sel.appendChild(head);
+  if(!list.length){ const o=document.createElement('option'); o.value=''; o.disabled=true; o.textContent='（まだ履歴がありません）'; sel.appendChild(o); }
+  list.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+  const blank=document.createElement('option'); blank.value='__blank__'; blank.textContent='（空欄にする）'; sel.appendChild(blank);
+  if(list.length){ const c=document.createElement('option'); c.value='__clear__'; c.textContent='― この行の履歴をすべて消す ―'; sel.appendChild(c); }
+}
+function refreshHistSelects(){ document.querySelectorAll('select.histsel').forEach(fillHistSelect); }
+
 function render(){
   const pages = Math.max(1, Math.ceil(photos.length/4));
   const box = $('pages'); box.innerHTML='';
@@ -404,11 +427,24 @@ function render(){
         cell.appendChild(sel);
         // 場所は2行まで（台紙の欄は1行あたり全角10文字ほど）
         const plBox = document.createElement('div'); plBox.className='place2';
-        [['place','場所 1行目'],['place2','場所 2行目（任意）']].forEach(([key,ph_],n)=>{
+        [['place','場所 1行目'],['place2','場所 2行目']].forEach(([key,ph_],n)=>{
+          const row = document.createElement('div'); row.className='plrow';
           const pl = document.createElement('input'); pl.type='text'; pl.className='cmt'; pl.id=key+'-'+idx; pl.maxLength=20;
           pl.placeholder=ph_; pl.value=ph[key]||''; pl.setAttribute('aria-label','写真'+(idx+1)+'の場所 '+(n+1)+'行目');
           pl.addEventListener('input',()=>{ ph[key]=pl.value; });
-          plBox.appendChild(pl);
+          pl.addEventListener('change',()=>{ addHist(key, pl.value); });
+          // ▼ 過去に入力した場所から選ぶ
+          const sel = document.createElement('select'); sel.className='histsel'; sel.dataset.key=key; sel.id='hist-'+key+'-'+idx;
+          sel.setAttribute('aria-label','写真'+(idx+1)+'の場所 '+(n+1)+'行目を履歴から選ぶ');
+          fillHistSelect(sel);
+          sel.addEventListener('change',()=>{
+            const v = sel.value; sel.selectedIndex = 0;
+            if (v === '__clear__') { clearHist(key); return; }
+            if (v === '__blank__') { pl.value=''; ph[key]=''; return; }
+            pl.value = v; ph[key] = v; addHist(key, v);
+          });
+          row.append(pl, sel);
+          plBox.appendChild(row);
         });
         cell.appendChild(plBox);
         const c = document.createElement('input'); c.type='text'; c.className='cmt'; c.id='cmt-'+idx; c.maxLength=40;
